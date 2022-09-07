@@ -22,7 +22,7 @@ from acts.examples.reconstruction import (
 def run_tracking(input_path: str, output_path: str, s=None):
 
     s = s or acts.examples.Sequencer(
-        events=100, numThreads=-1, logLevel=acts.logging.INFO
+        events=20, numThreads=4, logLevel=acts.logging.INFO
     )
     rnd = acts.examples.RandomNumbers(seed=42)
 
@@ -96,9 +96,26 @@ def run_tracking(input_path: str, output_path: str, s=None):
         outputDirRoot=outputDir,
     )
 
+    s.addAlgorithm(
+        acts.examples.TrackSelector(
+            level=acts.logging.INFO,
+            inputTrackParameters="fittedTrackParameters",
+            outputTrackParameters="trackparameters",
+            outputTrackIndices="outputTrackIndices",
+            removeNeutral=True,
+            absEtaMax=2.5,
+            loc0Max=4.0 * u.mm,
+            ptMin=2000 * u.MeV,
+        )
+    )
+
     # Setup Vertex Fitting
     s = addVertexFitting(
-        s, field, vertexFinder=VertexFinder.Truth, outputDirRoot=outputDir
+        s,
+        field,
+        vertexFinder=VertexFinder.Iterative,
+        outputDirRoot=outputDir,
+        trajectories="trajectories",
     )
 
     s.run()
