@@ -33,10 +33,12 @@ def runTruthTrackingKalman(
         SeedingAlgorithm,
         TruthSeedRanges,
         addKalmanTracks,
+        addVertexFitting,
+        VertexFinder,
     )
 
     s = s or acts.examples.Sequencer(
-        events=1, numThreads=1, logLevel=acts.logging.INFO
+        events=100, numThreads=-1, logLevel=acts.logging.INFO
     )
 
     rnd = acts.examples.RandomNumbers()
@@ -138,6 +140,26 @@ def runTruthTrackingKalman(
             filePath=str(outputDir / "performance_track_fitter.root"),
         )
     )
+    
+    s.addAlgorithm(
+        acts.examples.TrackSelector(
+            level=acts.logging.INFO,
+            inputTrackParameters="fittedTrackParameters",
+            outputTrackParameters="trackparameters",
+            outputTrackIndices="outputTrackIndices",
+            removeNeutral=True,
+            absEtaMax=2.5,
+            loc0Max=4.0 * u.mm, # rho max
+            ptMin=500 * u.MeV,
+        )
+    )
+    addVertexFitting(
+        s,
+        field,
+        vertexFinder=VertexFinder.Iterative
+        outputDirRoot=outputDir,
+        trajectories="trajectories",
+    )
 
     return s
 
@@ -152,6 +174,7 @@ if "__main__" == __name__:
     field = acts.ConstantBField(acts.Vector3(0, 0, 2 * u.T))
     outputDir= Path(str(Path.cwd()) + '/truth_tracking_kalman/') 
     inputParticlePath = Path(str(Path.cwd()) + "/data/gen/ttbar200-vxgen/pythia8_particles.root")
+
     runTruthTrackingKalman(
         trackingGeometry,
         field,
