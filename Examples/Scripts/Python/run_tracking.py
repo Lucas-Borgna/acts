@@ -12,6 +12,7 @@ from acts.examples.simulation import addFatras, addDigitization
 from acts.examples.reconstruction import (
     addSeeding,
     addCKFTracks,
+    addKalmanTracks,
     addVertexFitting,
     VertexFinder,
     TruthSeedRanges,
@@ -19,11 +20,9 @@ from acts.examples.reconstruction import (
 )
 
 
-def run_tracking(input_path: str, output_path: str, s=None):
+def run_tracking(input_path: str, output_path: str, truth_tracking: bool, s=None):
 
-    s = s or acts.examples.Sequencer(
-        events=20, numThreads=4, logLevel=acts.logging.INFO
-    )
+    s = s or acts.examples.Sequencer(events=1, numThreads=1, logLevel=acts.logging.INFO)
     rnd = acts.examples.RandomNumbers(seed=42)
 
     # LOAD EVENTS (pre-generated)
@@ -85,29 +84,79 @@ def run_tracking(input_path: str, output_path: str, s=None):
         outputDirRoot=outputDir,
         initialVarInflation=[100, 100, 100, 100, 100, 100],
     )
-
-    # Setup CKF Tracking
-
-    s = addCKFTracks(
-        s,
-        trackingGeometry,
-        field,
-        CKFPerformanceConfig(ptMin=2000.0 * u.MeV, nMeasurementsMin=6),
-        outputDirRoot=outputDir,
-    )
-
-    s.addAlgorithm(
-        acts.examples.TrackSelector(
-            level=acts.logging.INFO,
-            inputTrackParameters="fittedTrackParameters",
-            outputTrackParameters="trackparameters",
-            outputTrackIndices="outputTrackIndices",
-            removeNeutral=True,
-            absEtaMax=2.5,
-            loc0Max=4.0 * u.mm,
-            ptMin=2000 * u.MeV,
+    # Tracking setup
+    if truth_tracking:
+        # Setup Truth Tracking
+        directNavigation = False
+        reverseFilteringMomThreshold = 0 * u.GeV
+        addKalmanTracks(
+            s, trackingGeometry, field, directNavigation, reverseFilteringMomThreshold
         )
-    )
+
+        # Output
+        s.addWriter(
+            acts.examples.RootTrajectoryStatesWriter(
+                level=acts.logging.INFO,
+                inputTrajectories="trajectories",
+                inputParticles="truth_seeds_selected",
+                inputSimHits="simhits",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                inputMeasurementSimHitsMap="measurement_simhits_map",
+                filePath=str(outputDir / "trackstates_fitter.root"),
+            )
+        )
+
+        s.addWriter(
+            acts.examples.RootTrajectorySummaryWriter(
+                level=acts.logging.INFO,
+                inputTrajectories="trajectories",
+                inputParticles="truth_seeds_selected",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                filePath=str(outputDir / "tracksummary_fitter.root"),
+            )
+        )
+
+        # s.addWriter(
+        #     acts.examples.TrackFinderPerformanceWriter(
+        #         level=acts.logging.INFO,
+        #         inputProtoTracks="sortedprototracks" if directNavigation else "prototracks",
+        #         inputParticles="truth_seeds_selected",
+        #         inputMeasurementParticlesMap="measurement_particles_map",
+        #         filePath=str(outputDir / "performance_track_finder.root"),
+        #     )
+        # )
+        s.addWriter(
+            acts.examples.TrackFitterPerformanceWriter(
+                level=acts.logging.INFO,
+                inputTrajectories="trajectories",
+                inputParticles="truth_seeds_selected",
+                inputMeasurementParticlesMap="measurement_particles_map",
+                filePath=str(outputDir / "performance_track_fitter.root"),
+            )
+        )
+
+    else:
+        # Setup CKF Tracking
+        s = addCKFTracks(
+            s,
+            trackingGeometry,
+            field,
+            CKFPerformanceConfig(ptMin=2000.0 * u.MeV, nMeasurementsMin=6),
+            outputDirRoot=outputDir,
+        )
+
+        s.addAlgorithm(
+            acts.examples.TrackSelector(
+                level=acts.logging.INFO,
+                inputTrackParameters="fittedTrackParameters",
+                outputTrackParameters="trackparameters",
+                outputTrackIndices="outputTrackIndices",
+                removeNeutral=True,
+                absEtaMax=2.5,
+                loc0Max=4.0 * u.mm,
+                ptMin=2000 * u.MeV,
+            )
+        )
 
     # Setup Vertex Fitting
     s = addVertexFitting(
@@ -135,5 +184,16 @@ if __name__ == "__main__":
         default="ttbar_pythia_sim/csv",
         help="Output directory",
     )
+    parser.add_argument(
+        "-t",
+        "--truth-tracking",
+        default=False,
+        help="Truth tracking",
+        action="store_true",
+    )
     args = parser.parse_args()
-    run_tracking(input_path=args.input, output_path=args.output)
+    run_tracking(
+        input_path=args.input,
+        output_path=args.output,
+        truth_tracking=args.truth_tracking,
+    )
